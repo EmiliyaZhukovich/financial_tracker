@@ -2,7 +2,7 @@ from logging.config import fileConfig
 import os
 import sys
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import engine_from_config, create_engine
 from sqlalchemy import pool
 
 from alembic import context
@@ -23,7 +23,11 @@ if SRC_DIR not in sys.path:
 
 # add your model's MetaData object here for 'autogenerate' support
 from models.get_db import Base, DATABASE_URL
+# Import models so that SQLAlchemy registers them on Base.metadata
+import revenue.models
+import expenses.models # noqa: F401
 target_metadata = Base.metadata
+
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -63,13 +67,12 @@ def run_migrations_online() -> None:
 
     """
     section = config.get_section(config.config_ini_section, {})
-    section["sqlalchemy.url"] = section.get("sqlalchemy.url") or DATABASE_URL
+    # Set the database URL if not already configured
+    if not section.get("sqlalchemy.url"):
+        section["sqlalchemy.url"] = DATABASE_URL
 
-    connectable = engine_from_config(
-        section,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Create engine directly instead of using engine_from_config
+    connectable = create_engine(DATABASE_URL, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         context.configure(
