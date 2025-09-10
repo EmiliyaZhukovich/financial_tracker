@@ -1,15 +1,8 @@
 from models.get_db import Base
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
 from datetime import datetime
-
-
-class Category(Base):
-    __tablename__ = 'categories'
-    id = Column(Integer, primary_key=True)
-    category_name = Column(String(255), nullable=False)
-
-
-
+from category.models import Category
 
 class Expenses(Base):
     __tablename__ = 'expenses'
@@ -19,3 +12,4 @@ class Expenses(Base):
     amount = Column(Integer, nullable=False)
     date = Column(DateTime, default=datetime.now)
 
+    category = relationship("Category", back_populates = 'expenses')

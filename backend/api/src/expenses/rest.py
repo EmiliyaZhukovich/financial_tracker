@@ -1,94 +1,89 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-import datetime
 
 from models.get_db import get_db
-from .models import Category, Expenses
-from .dto import CategoryDTO, ExpensesDTO, CreateCategoryDTO
+from .models import Expenses
+from .dto import ExpensesDTO, CreateExpensesDTO, UpdateExpensesDTO
+from category.models import Category
 
 router = APIRouter()
 
 
-@router.get('/categories', response_model=List[CategoryDTO])
-async def get_categories(db: Session = Depends(get_db)):
+@router.get('/expenses', response_model=List[ExpensesDTO], status_code=200)
+async def get_expenses(db:Session = Depends(get_db)):
     try:
-        categories = db.query(Category).all()
-        return categories
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Error getting categories: {str(e)}')
-
-
-@router.post('/categories', response_model=CategoryDTO, status_code=201)
-async def create_category(new_data: CreateCategoryDTO, db: Session = Depends(get_db)):
-    try:
-        # Проверяем, существует ли уже категория с таким именем
-        existing_category = db.query(Category).filter(Category.category_name == new_data.category_name).first()
-        if existing_category:
-            raise HTTPException(status_code=400, detail='Уже есть такое имя категории')
-
-        # Создаем новую категорию
-        new_category = Category(category_name=new_data.category_name)
-        db.add(new_category)
-        db.commit()
-        db.refresh(new_category)
-        return new_category
+        expenses = db.query(Expenses).all()
+        return expenses
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f'Error creating category: {str(e)}')
+        raise HTTPException(status_code=500, detail = f'Error {e}')
 
-@router.get('/categories/{category_name}', response_model=List[CategoryDTO])
-async def get_categories(category_name: str, db: Session = Depends(get_db)):
+@router.post('/expenses', response_model=ExpensesDTO, status_code=201)
+async def create_expense(data: CreateExpensesDTO, db: Session = Depends(get_db)):
     try:
-        existing_category = db.query(Category).filter(Category.category_name==category_name)
-        if not existing_category:
-            raise HTTPException(status_code=404, detail='Нет такого имя категории')
-        return existing_category
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Error getting categories: {str(e)}')
+        # Проверка существования категории
+        category = db.query(Category).filter(Category.id == data.category_id).first()
+        if not category:
+            raise HTTPException(status_code=400, detail="Category with this ID does not exist")
 
-
-@router.put('/categories/{category_id}', response_model=CategoryDTO, status_code=200)
-async def update_category(category_id: int, new_data: CreateCategoryDTO, db: Session = Depends(get_db)):
-    try:
-        existing_category = db.query(Category).filter(Category.id==category_id).first()
-        if not existing_category:
-            raise HTTPException(status_code=404, detail='Нет такого имя категории')
-
-        dublicate_category = db.query(Category).filter(
-            Category.category_name == new_data.category_name,
-            Category.id != category_id
-        ).first() or db.query(Category).filter(
-            Category.category_name == new_data.category_name,
-            Category.id == category_id
-        ).first()
-        if dublicate_category:
-            raise HTTPException(status_code=400, detail='Категория с таким именем уже существует')
-
-        existing_category.category_name = new_data.category_name
-        db.commit()
-        db.refresh(existing_category)
-        return existing_category
+        # Создание нового объекта Expenses
+        new = Expenses(
+            category_id=data.category_id,
+            amount=data.amount,
+            date=data.date
+        )
+        db.add(new)
+        db.commit()  # Сохраняем изменения
+        db.refresh(new)  # Обновляем объект для получения актуальных данных (например, id)
+        return new
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f'Error creating category: {str(e)}')
+        db.rollback()  # Откатываем транзакцию в случае ошибки
+        raise HTTPException(status_code=500, detail=f'Error: {str(e)}')
 
-@router.delete('/categories/{category_id}', status_code=200)
-async def delete_category(category_id: int, db: Session = Depends(get_db)):
+# TODO: ХОЧУ ВЫВЕСТИ ВМЕСТО ID КАТЕГОРИИ, ИМЯ КАТЕГОРИИ
+@router.put('/expenses/{expense_id}', response_model=ExpensesDTO, status_code=200)
+async def update_expense(expense_id: int, data: UpdateExpensesDTO, db: Session = Depends(get_db)):
     try:
-        existing_category = db.query(Category).filter(Category.id==category_id).first()
-        if not existing_category:
-            raise HTTPException(status_code=404, detail='Нет такого имя категории')
+        existing = db.query(Expenses).filter(Expenses.id == expense_id).first()
+        if not existing:
+            raise HTTPException(status_code=400, detail="Expens with this ID does not exist")
 
-        db.delete(existing_category)
-        db.commit()
-        return "success delete"
+        if data.category_id is not None:
+            category = db.query(Category).filter(Category.id == data.category_id).first()
+            if not category:
+                raise HTTPException(status_code=400, detail="Category with this ID does not exist")
+            existing.category_id = data.category_id
+        if data.amount is not None:
+            existing.amount = data.amount
+        if data.date is not None:
+            existing.date = data.date
+
+        db.commit()  # Сохраняем изменения
+        db.refresh(existing)  # Обновляем объект для получения актуальных данных (например, id)
+        return existing
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f'Error delete category: {str(e)}')
+        db.rollback()  # Откатываем транзакцию в случае ошибки
+        raise HTTPException(status_code=500, detail=f'Error: {str(e)}')
+
+
+@router.delete('/expenses/{expense_id}', status_code=200)
+async def update_expense(expense_id: int, db: Session = Depends(get_db)):
+    try:
+        existing = db.query(Expenses).filter(Expenses.id == expense_id).first()
+        if not existing:
+            raise HTTPException(status_code=400, detail="Expens with this ID does not exist")
+
+        db.delete(existing)
+        db.commit()  # Сохраняем изменения
+        return "delete seccess"
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()  # Откатываем транзакцию в случае ошибки
+        raise HTTPException(status_code=500, detail=f'Error: {str(e)}')
